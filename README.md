@@ -39,6 +39,11 @@ The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23
 
 ## Safety
 
+> [!WARNING]
+> Before testing on an unverified device or firmware, enable automatic USB connection and confirm that plugging in the USB cable connects the Kobo to your computer without tapping Connect. If rotation misaligns touch coordinates, it may be impossible to tap the Connect button. Automatic USB connection lets you access the device to disable or uninstall NickelRotate without using its touchscreen.
+
+The Clara BW and Clara Colour combinations marked as tested above have verified rotation and touch controls. This precaution is required for unverified combinations, including Clara HD, Clara 2E and Clara BW P365. Other hardware UUIDs remain inactive unless you modify the mod to support them.
+
 ### Whole-mod boot failsafe
 
 Before applying hooks, NickelHook renames the plugin to `libnickelrotate.so.failsafe`. After initialization finishes, it waits three seconds before restoring the filename. If initialization crashes or hangs, or the process exits before that restore, the next boot cannot load the plugin.
