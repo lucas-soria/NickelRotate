@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a problem with NickelRotate
+labels: [bug]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Kobo device and revision
+      placeholder: e.g. Clara BW N365
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      description: "Settings > Device information > Software version."
+      placeholder: e.g. 4.45.23697
+    validations:
+      required: true
+  - type: input
+    id: modversion
+    attributes:
+      label: NickelRotate version
+      description: The release or commit you installed.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the expected result and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the book format and orientation. For touch problems, say whether positions are relative to the upright device or the rotated text.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Syslog output
+      description: If you have shell access, include relevant NickelRotate and NickelHook output from logread. There is no dedicated onboard log file.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I rebooted after installing.
+          required: true
+        - label: I removed the old Allow rotation on all devices binary patch.
+          required: true
+        - label: The .adds/nickel-rotate/disabled marker is absent.
+          required: true

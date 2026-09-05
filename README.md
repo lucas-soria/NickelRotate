@@ -1,8 +1,25 @@
 # NickelRotate
 
-Manual rotation for the built-in reader on Kobo Clara HD, Clara 2E, Clara BW and Clara Colour. Choose Portrait or Landscape from the reading menu. Home, Library and general settings stay portrait.
+A [NickelHook](https://github.com/pgaskin/NickelHook) mod that adds manual rotation to the built-in reader on Kobo Clara HD, Clara 2E, Clara BW and Clara Colour. Choose Portrait or Landscape from the reading menu. Home, Library and general settings stay portrait.
 
 NickelRotate is experimental. Rotation and touch have been tested on Clara BW and Clara Colour running firmware 4.45.23697.
+
+> [!IMPORTANT]
+> This mod targets Kobo software **4.x only**. See [Compatibility](#compatibility) for model-specific requirements and test results.
+
+## What it does
+
+The reading menu gains Kobo's native rotation button with Portrait and Landscape options. Auto rotation is hidden because these Clara models have no orientation sensor. When no orientation lock is saved, the popup highlights the current orientation. It expands to fit the visible labels and selected icons.
+
+Kobo saves the reading orientation in its existing preference. NickelRotate permits landscape in the reader, table of contents, advanced font settings, annotation entry and bookmarks. Kobo's controller restrictions still apply, including for audiobooks. Returning to the reader restores the reading preference.
+
+## Why was this made?
+
+The Clara has no native rotation control. Enabling the existing global rotation patch also affects other views and can leave touch coordinates misaligned. NickelRotate exposes rotation in the reader and corrects the touch transform on models that need it.
+
+## Configuration
+
+There is no configuration file. To disable NickelRotate, create an empty `.adds/nickel-rotate/disabled` file and reboot. Delete that file and reboot to enable it again.
 
 ## Compatibility
 
@@ -20,51 +37,45 @@ All five model revisions above are enabled. P365 uses the same implementation as
 
 The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The popup fixes added in 0.1.8-dev have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
 
-## Installation and use
+## Safety
 
-Remove the old `Allow rotation on all devices` binary patch before testing. NickelRotate does not undo that patch's changes to the rotation popup.
+### Whole-mod boot failsafe
 
-1. Copy the built `KoboRoot.tgz` to `.kobo` on a supported Kobo.
-2. Safely eject and unplug the Kobo. Let it install the package.
-3. Open a book and its reading menu, then tap the rotation button.
-4. Choose Portrait or Landscape.
+Before applying hooks, NickelHook renames the plugin to `libnickelrotate.so.failsafe`. After initialization finishes, it waits three seconds before restoring the filename. If initialization crashes or hangs, or the process exits before that restore, the next boot cannot load the plugin.
 
-Auto rotation is hidden because these Clara models have no orientation sensor. When no orientation lock is saved, the popup highlights the current orientation. The popup expands to fit its visible labels and selected icons.
+The startup failsafe does not detect touch problems found later while reading. If touches are misaligned, reconnect by USB and disable or uninstall the mod.
 
-Kobo saves the reading orientation in its existing preference. NickelRotate permits landscape in the reader, table of contents, advanced font settings, annotation entry and bookmarks. Kobo's controller restrictions still apply, including for audiobooks. Home, Library, general settings and unknown controllers stay portrait. Returning to the reader restores the reading preference.
+### Required hooks
 
-## Disable or uninstall
-
-To disable NickelRotate, create an empty `.adds/nickel-rotate/disabled` file and reboot. Delete that file and reboot to enable it again.
-
-To uninstall, delete `.adds/nickel-rotate/uninstall` and reboot. NickelRotate removes its plugin and known support files on startup. It preserves other files in that directory.
-
-NickelHook provides a startup failsafe. It does not detect touch problems found later while reading. If touches are misaligned, reconnect by USB and disable or uninstall the mod.
-
-The old `diagnostics` and `observe-touch` markers are ignored. The current build does not write touch logs. Old diagnostic logs remain until uninstall.
+Rotation and touch correction must work together. All eight hooks and the controller lookup are required. If a target cannot be resolved, NickelHook rolls back the hooks it applied. Unsupported models, firmware versions and unexpected screen geometry keep NickelRotate inactive.
 
 ## Build
 
-Clone this repository with `--recurse-submodules`. For an existing checkout, run `git submodule update --init --recursive` to fetch the pinned NickelHook dependency.
+With Docker or Podman running:
 
-Run `./build.sh` with a running Podman or Docker engine. It uses a pinned NickelBench image containing NickelTC and Qt 5.2.1. The outputs are `KoboRoot.tgz` and `src/libnickelrotate.so`. The build does not install anything on a connected device.
+```sh
+git submodule update --init --recursive
+./build.sh
+```
 
-## Checks
+This builds `KoboRoot.tgz` and runs compatibility and package checks in the [NickelBench](https://github.com/nicoverbruggen/nickelbench) image. It does not install anything on a connected device. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands and validation details.
 
-Run `make test` for local C++ policy tests with address and undefined-behaviour sanitizers. Run `./test.sh` for those tests plus the production hooks tested against simulated Nickel callers and host Qt. These tests cover device and firmware gates, reader permissions, touch transforms, popup selection and sizing, translated labels, disabled passthrough and exception cleanup. They do not emulate Kobo's firmware or touch hardware.
+## Install
 
-Run `python3 test/verify_package.py` to check archive paths, file modes and payload bytes. Run `python3 test/verify_firmware.py PATH_TO_LIBNICKEL PATH_TO_LIBKEVDEVTOUCH src/libnickelrotate.so` to check the eight hook call sites, symbol bindings, controller RTTI, plugin exports and ARM ABI against extracted firmware.
+Remove the old `Allow rotation on all devices` binary patch first. NickelRotate does not undo that patch's changes to the rotation popup.
 
-On a device, check taps near every corner, page turns, swipes, text selection and reading controls in both EPUB and KEPUB. Check the table of contents and reading dialogs, then return to Home, Library and settings. Repeat after sleep, closing the book and rebooting. Check taps again after returning to portrait.
+Copy `KoboRoot.tgz` to the Kobo's hidden `.kobo` folder. Safely eject, unplug and let the Kobo install the package. Reboot if installation does not start. Open a book and its reading menu, tap the rotation button, then choose Portrait or Landscape.
 
-## Implementation
+## Uninstall
 
-`src/nickelrotate.cc` uses eight NickelHook PLT hooks. A thread-local permission scope exposes rotation while Nickel calculates reader permissions or updates the reading menu. Sensor queries outside that scope keep their original behaviour. A leftover `ForceAllowLandscape` setting is ignored inside the permission scope without changing the configuration file.
+Delete `.adds/nickel-rotate/uninstall` and reboot. NickelHook removes the plugin, and NickelRotate removes its known support files. Other files in that directory are preserved.
 
-The touch hooks preserve Kobo's panel mapping. BW and Colour use the opposite landscape quarter-turn from Qt to correct the alignment observed in device testing. The experimental HD profile uses that correction too; the 2E profile preserves Nickel's complete native touch transform. These older-model profiles are inferred from the firmware rotation tables and [FBInk's device mappings](https://github.com/NiLuJe/FBInk/blob/master/fbink_device_id.c), and still need hardware validation. Orientation changes are read on the GUI thread and shared with the touch thread through an atomic value. Portrait preserves the panel mapper's output.
+## Development
 
-The popup constructor hook hides the separator above Portrait. The selection hook highlights the current orientation when Auto would be selected, then expands the popup to fit its visible layout. The constructor hook preserves the ARM return value. Hook targets must be globally bound functions; NickelHook rejects weak symbols such as the generated `setupUi` function.
+This repository was developed with assistance from large language models and tested on the devices listed above. Source and firmware checks do not replace device testing.
 
-The controller hook uses exported RTTI to cross-cast `AbstractController` to `QObject`. It does not assume the two base pointers have the same address.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for building, testing and pull requests, [ABOUT.md](ABOUT.md) for implementation details, and [CHANGELOG.md](CHANGELOG.md) for changes.
 
-[NickelHook](https://github.com/pgaskin/NickelHook) is a Git submodule pinned to `bcd90ba94d90d22562fb64ef2920ed3323c1dae5`. Its MIT licence is included in the submodule and install package. The build container is pinned by digest in `build.sh`. Firmware binaries are not included in this repository or the package.
+## License
+
+MIT. See [LICENSE](LICENSE). NickelHook is Copyright © 2020–2025 Patrick Gaskin and includes its own [MIT license](NickelHook/LICENSE).

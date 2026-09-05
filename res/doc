@@ -20,10 +20,11 @@ To disable the mod, create an empty disabled file and reboot.
 To remove the mod, delete uninstall and reboot.
 NickelHook's startup failsafe does not cover touch problems found later.
 
-NickelHook licence
+NickelRotate and NickelHook licence
 
 MIT License
 
+Copyright (c) 2026 Nico Verbruggen
 Copyright (c) 2020-2025 Patrick Gaskin
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of

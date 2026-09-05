@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 workdir="${PWD}"
 scratch="${workdir}/tmp/build"
-image="${NICKELTC_IMAGE:-ghcr.io/nicoverbruggen/nickelbench@sha256:d04d7fdcdd5422809b487972beb2d9b6ff6ed7e9552b1b6091851189aca2049e}"
+image="${NICKELTC_IMAGE:-ghcr.io/nicoverbruggen/nickelbench:recent}"
 if command -v podman >/dev/null 2>&1; then
     engine=podman
 elif command -v docker >/dev/null 2>&1; then
@@ -12,6 +12,9 @@ else
     echo "Building NickelRotate requires Podman or Docker." >&2
     exit 127
 fi
+if [ "$#" -eq 0 ]; then set -- clean all strip koboroot check; fi
+# The source archive excludes .git. Pass the host version to NickelHook.
+version="$(git describe --tags --always --dirty 2>/dev/null || true)"
 mkdir -p "${scratch}"
 export COPYFILE_DISABLE=1
 tar_options=()
@@ -22,16 +25,20 @@ fi
 tar "${tar_options[@]}" --exclude=.git --exclude=.DS_Store --exclude=tmp --exclude=KoboRoot.tgz \
     --exclude='*.o' --exclude='*.so' --exclude='*.moc' --exclude=nhplugin.json \
     -czf "${scratch}/source.tgz" .
-"${engine}" run --rm -i --platform linux/amd64 --entrypoint sh "${image}" -lc '
+"${engine}" run --rm -i --platform linux/amd64 --entrypoint sh --env "NH_BUILD_VERSION=${version}" "${image}" -lc '
     set -eu
     mkdir /work
     tar -xzf - -C /work
     cd /work
     export PATH="/tc/arm-nickel-linux-gnueabihf/bin:$PATH"
-    make clean all strip koboroot \
+    make "$@" VERSION="${NH_BUILD_VERSION}" \
         CROSS_COMPILE=arm-nickel-linux-gnueabihf- \
         MOC=/tc/arm-nickel-linux-gnueabihf/arm-nickel-linux-gnueabihf/sysroot/usr/bin/moc \
         RCC=/tc/arm-nickel-linux-gnueabihf/arm-nickel-linux-gnueabihf/sysroot/usr/bin/rcc >&2
-    tar -czf - KoboRoot.tgz src/libnickelrotate.so
-' < "${scratch}/source.tgz" > "${scratch}/artifacts.tgz"
-tar -xzf "${scratch}/artifacts.tgz" -C "${workdir}" KoboRoot.tgz src/libnickelrotate.so
+    if [ -f KoboRoot.tgz ] && [ -f src/libnickelrotate.so ]; then
+        tar -czf - KoboRoot.tgz src/libnickelrotate.so
+    fi
+' sh "$@" < "${scratch}/source.tgz" > "${scratch}/artifacts.tgz"
+if [ -s "${scratch}/artifacts.tgz" ]; then
+    tar -xzf "${scratch}/artifacts.tgz" -C "${workdir}" KoboRoot.tgz src/libnickelrotate.so
+fi

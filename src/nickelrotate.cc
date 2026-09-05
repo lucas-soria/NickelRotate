@@ -187,17 +187,26 @@ static struct nh_info info = {
     .failsafe_delay = 3,
 };
 static struct nh_hook hooks[] = {
+    //nb hook libnickel 4.38.23684 * _ZN11RotatePopup15setSelectedItemE6QFlagsIN2Qt17ScreenOrientationEE
     { .sym = "_ZN11RotatePopup15setSelectedItemE6QFlagsIN2Qt17ScreenOrientationEE", .sym_new = "nr_selected_item", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realSelectedItem) },
+    //nb hook libnickel 4.38.23684 * _ZN11RotatePopupC1EP7QWidget
     { .sym = "_ZN11RotatePopupC1EP7QWidget", .sym_new = "nr_rotate_popup", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realRotatePopup) },
+    //nb hook libnickel 4.38.23684 * _ZNK20MainWindowController21allowableOrientationsEP18AbstractController
     { .sym = "_ZNK20MainWindowController21allowableOrientationsEP18AbstractController", .sym_new = "nr_allowable", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realAllowable) },
+    //nb hook libnickel 4.38.23684 * _ZN15ReadingMenuView17updateReadingMenuEv
     { .sym = "_ZN15ReadingMenuView17updateReadingMenuEv", .sym_new = "nr_reading_menu", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realReadingMenu) },
+    //nb hook libnickel 4.38.23684 * _ZNK6Device20hasOrientationSensorEv
     { .sym = "_ZNK6Device20hasOrientationSensorEv", .sym_new = "nr_has_sensor", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realHasSensor) },
+    //nb hook libnickel 4.38.23684 * _ZN11DevSettings19forceAllowLandscapeEv
     { .sym = "_ZN11DevSettings19forceAllowLandscapeEv", .sym_new = "nr_force_landscape", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realForceLandscape) },
+    // NickelBench does not record libkevdevtouch. Both touch hooks are checked
+    // against extracted firmware by test/verify_firmware.py.
     { .sym = "_ZNK21QEvdevTouchScreenData13mapFromDeviceERK6QPoint", .sym_new = "nr_map_from_device", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realMapFromDevice) },
     { .sym = "_ZNK10QTransform3mapERK6QPoint", .sym_new = "nr_transform_map", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realTransformMap) },
     {0},
 };
 static struct nh_dlsym symbols[] = {
+    //nb lookup libnickel 4.38.23684 * _ZTI18AbstractController
     { .name = "_ZTI18AbstractController", .out = nh_symoutptr(abstractType) },
     {0},
 };

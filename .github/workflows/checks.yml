@@ -1,0 +1,51 @@
+name: Checks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: NickelRotate
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/nicoverbruggen/nickelbench:recent
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Build
+        run: make clean all strip koboroot
+      - name: Check firmware compatibility and package
+        run: make check
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: NickelRotate
+          path: |
+            KoboRoot.tgz
+            src/libnickelrotate.so
+          if-no-files-found: error
+
+  tests:
+    name: Policy and Qt hooks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install host Qt
+        run: sudo apt-get update && sudo apt-get install -y g++ make pkg-config qtbase5-dev
+      - name: Check policy
+        run: make test
+      - name: Check production hooks
+        run: test/hooks.sh

@@ -12,7 +12,7 @@ expected = {
 seen = set()
 with tarfile.open(root / 'KoboRoot.tgz', 'r:gz') as archive:
     for item in archive:
-        name = item.name.removeprefix('./')
+        name = item.name[2:] if item.name.startswith('./') else item.name
         assert item.isfile() and name in expected and name not in seen, item.name
         expected_mode = 0o755 if name.endswith('.so') else 0o644
         assert item.mode == expected_mode and item.uid == 0 and item.gid == 0
