@@ -26,7 +26,7 @@ With NickelTC installed on the host, use `make CROSS_COMPILE=/path/to/nickeltc/b
 - `./build.sh` builds with Kobo's Qt 5.2.1 toolchain and runs `make check` inside NickelBench.
 - `python3 test/verify_package.py` checks archive paths, file modes, ownership and payload bytes.
 
-The production hook tests use simulated Nickel callers and real host Qt widgets. They cover device and firmware gates, reader permissions, touch transforms, popup selection and sizing, translated labels, disabled passthrough and exception cleanup. They do not emulate Kobo firmware or touch hardware.
+The production hook tests use simulated Nickel callers and real host Qt widgets. They cover device and firmware gates, reader permissions, touch transforms, popup selection and native sizing before show, paired orientation masks, translated labels, disabled passthrough and exception cleanup. They do not emulate Kobo firmware or touch hardware.
 
 ## Firmware compatibility
 
@@ -56,7 +56,7 @@ Record the exact hardware revision, firmware and mod version. Clara HD, Clara 2E
 
 Startup and loader messages go to syslog through `nh_log`. If you have shell access, use `logread` and include the NickelRotate and NickelHook messages relevant to the failure. NickelRotate does not write a dedicated onboard log or per-touch traces.
 
-Old `diagnostics` and `observe-touch` markers are ignored. Known legacy log files are removed during uninstall.
+Old `diagnostics` and `observe-touch` markers are ignored. Known legacy log files, including the temporary popup-width trace, are removed during uninstall.
 
 ## Pull requests
 

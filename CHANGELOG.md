@@ -14,4 +14,5 @@
 
 - Misaligned landscape touch coordinates on Clara BW and Clara Colour.
 - The extra separator above Portrait when Auto rotation is hidden.
-- The initial Portrait selection and popup width for selected icons and translated labels.
+- The initial Portrait selection and popup width for selected icons and translated labels, with 12 pixels of extra padding after each label.
+- Popup width changing on open or after switching orientation. The constructor now stabilizes the hidden geometry used by Nickel's native width calculation.

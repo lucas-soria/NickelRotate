@@ -11,6 +11,8 @@
 #include <QVariant>
 #include <QWidget>
 #include <QLayout>
+#include <QLabel>
+#include <QFontMetrics>
 #include <cxxabi.h>
 #include <atomic>
 #include <cstring>
@@ -59,6 +61,58 @@ NR_EXPORT void nr_reading_menu(void *self) {
     realReadingMenu(self);
 }
 
+static void invalidatePopupLayout(QLayout *layout) {
+    // Refresh nested widget and row hints before measuring an unshown popup.
+    for (int i = 0; i < layout->count(); ++i) {
+        QLayoutItem *item = layout->itemAt(i);
+        QLayout *child = item->layout();
+        if (!child && item->widget()) child = item->widget()->layout();
+        if (child) invalidatePopupLayout(child);
+        if (item->widget()) item->widget()->updateGeometry();
+    }
+    layout->invalidate();
+}
+
+static void preparePopupWidth(QWidget *popup) {
+    QLayout *layout = popup->layout();
+    auto *autoRow = popup->findChild<QWidget *>(QStringLiteral("autoRotateContainer"));
+    auto *autoIcon = popup->findChild<QWidget *>(QStringLiteral("autoRotateImage"));
+    auto *autoLabel = popup->findChild<QLabel *>(QStringLiteral("labelAuto"));
+    if (!layout || !autoRow || !autoRow->isHidden() || !autoIcon || !autoLabel) return;
+
+    popup->ensurePolished();
+    for (const char *name : {"labelPortrait", "labelLandscape"}) {
+        auto *label = popup->findChild<QLabel *>(QString::fromLatin1(name));
+        if (!label) continue;
+        const QMargins margins = label->contentsMargins();
+        label->setContentsMargins(margins.left(), margins.top(), margins.right() + 12, margins.bottom());
+    }
+    int width = 0;
+    // setSelectedItem only changes pixmaps. Measure both states before any
+    // paint, then show the current orientation until Nickel loads its lock.
+    for (int item : {nr::Portrait, nr::Landscape}) {
+        realSelectedItem(popup, item);
+        invalidatePopupLayout(layout);
+        width = qMax(width, layout->totalSizeHint().width());
+    }
+    const int current = orientation.load(std::memory_order_acquire);
+    realSelectedItem(popup, current == nr::Landscape || current == nr::InvertedLandscape
+        ? nr::Landscape : nr::Portrait);
+    invalidatePopupLayout(layout);
+
+    // Nickel's sizeHint is Auto's text width + 3 * Auto's icon geometry width.
+    // The hidden icon starts at 100 px and later shrinks to 41 px on the BW.
+    // Fix that input so both the initial popup size and setVisible's later
+    // setFixedSize agree. Round up to fit the visible rows, keeping native height.
+    const QFontMetrics metrics(autoLabel->font());
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+    const int textWidth = metrics.horizontalAdvance(autoLabel->text());
+#else
+    const int textWidth = metrics.width(autoLabel->text());
+#endif
+    autoIcon->setFixedWidth((qMax(0, width - textWidth) + 2) / 3);
+}
+
 // The ARM constructor returns this. Preserve its return value and pass the
 // parent through unchanged; QObject is the popup's first base via QWidget.
 NR_EXPORT QObject *nr_rotate_popup(QObject *popup, QObject *parent) {
@@ -69,6 +123,7 @@ NR_EXPORT QObject *nr_rotate_popup(QObject *popup, QObject *parent) {
     QObject *separator = popup->findChild<QObject *>(QStringLiteral("dividerLine1"));
     if (separator && separator->inherits("QFrame"))
         separator->setProperty("visible", false);
+    preparePopupWidth(static_cast<QWidget *>(popup));
     return result;
 }
 
@@ -82,13 +137,6 @@ NR_EXPORT void nr_selected_item(QWidget *popup, int selected) {
             ? nr::Landscape : nr::Portrait;
     }
     realSelectedItem(popup, selected);
-    // Nickel fixes the size using the hidden Auto row before updating icons.
-    // Measure the visible layout now that the selected icon has its final size.
-    // Keep any wider native size and leave the native height untouched.
-    if (QLayout *layout = popup->layout()) {
-        layout->invalidate();
-        popup->setFixedWidth(qMax(popup->width(), layout->totalSizeHint().width()));
-    }
 }
 
 NR_EXPORT bool nr_has_sensor(const void *self) {
@@ -169,7 +217,7 @@ static int init() {
 static bool uninstall() {
     // Preserve user-created files. NickelHook removes the plugin itself.
     const char *files[] = {"doc", "uninstall", "disabled", "diagnostics", "observe-touch",
-                           "nickel-rotate.log", "nickel-rotate.log.old"};
+                           "nickel-rotate.log", "nickel-rotate.log.old", "popup-width.log"};
     bool ok = true;
     for (const char *name : files) {
         const std::string path = std::string(NR_DIR) + "/" + name;

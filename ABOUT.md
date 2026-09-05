@@ -12,7 +12,11 @@ The touch hooks preserve Kobo's panel mapping. BW and Colour use the opposite la
 
 ## Rotation popup
 
-The popup constructor hook hides the separator above Portrait. The selection hook highlights the current orientation when Auto would be selected, then expands the popup to fit its visible layout. The constructor hook preserves the ARM return value. Hook targets must be globally bound functions; NickelHook rejects weak symbols such as the generated `setupUi` function.
+The popup constructor hook hides the separator above Portrait and prepares the width before Nickel shows the menu. Nickel's native width is the hidden Auto label's text width plus three times the hidden Auto icon's geometry width. The device trace showed that icon changing from 100 to 41 pixels. This changed the native popup width from 463 to 286 pixels, after which the old selection hook expanded it to 316 pixels while visible.
+
+The constructor adds 12 pixels to the right content margin of each visible label. It then measures the visible layout with each option selected, restores the current orientation, and fixes the hidden Auto icon's width so the native formula fits the wider layout. It rounds up by at most two pixels when the visible layout is wider than Auto's text. This keeps the initial size and the later native `setFixedSize` call consistent. Native height and positioning still use Nickel's own calculations. This width formula was inspected on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836.
+
+The selection hook only replaces the hidden Auto highlight with the current orientation. Nickel also supplies the paired Portrait and Landscape masks, 5 and 10, which pass through unchanged. The constructor preserves the ARM return value. Hook targets must be globally bound functions; NickelHook rejects weak symbols such as the generated `setupUi` function.
 
 ## Controller pointers
 

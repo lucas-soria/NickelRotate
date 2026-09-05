@@ -9,7 +9,7 @@ NickelRotate is experimental. Rotation and touch have been tested on Clara BW an
 
 ## What it does
 
-The reading menu gains Kobo's native rotation button with Portrait and Landscape options. Auto rotation is hidden because these Clara models have no orientation sensor. When no orientation lock is saved, the popup highlights the current orientation. It expands to fit the visible labels and selected icons.
+The reading menu gains Kobo's native rotation button with Portrait and Landscape options. Auto rotation is hidden because these Clara models have no orientation sensor. When no orientation lock is saved, the popup highlights the current orientation. Its width fits both selected icon states, so switching options does not resize it.
 
 Kobo saves the reading orientation in its existing preference. NickelRotate permits landscape in the reader, table of contents, advanced font settings, annotation entry and bookmarks. Kobo's controller restrictions still apply, including for audiobooks. Returning to the reader restores the reading preference.
 

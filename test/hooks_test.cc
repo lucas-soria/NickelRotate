@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFontMetrics>
+#include <QResizeEvent>
+#include <QShowEvent>
 
 extern "C" void nh_log(const char *, ...) {}
 extern "C" bool nh_delete_file(const char *) { return true; }
@@ -89,61 +92,153 @@ static void stockSelectedItem(QWidget *popup, int selected) {
     selectedItem = selected;
     for (const char *name : {"portraitImage", "landscapeImage"}) {
         auto *icon = popup->findChild<QLabel *>(name);
-        const bool hit = selected == (std::strcmp(name, "portraitImage") == 0 ? 1 : 2);
+        const int item = std::strcmp(name, "portraitImage") == 0 ? 1 : 2;
+        const bool hit = (selected & 3) == item;
         QPixmap pixmap(hit ? 70 : 42, 70);
         pixmap.fill(Qt::black);
         icon->setPixmap(pixmap);
     }
 }
 
-static void popupSelectionAndWidth() {
-    QWidget popup;
-    auto *layout = new QVBoxLayout(&popup);
-    layout->setContentsMargins(12, 8, 12, 8);
-    for (const char *name : {"portraitImage", "landscapeImage"}) {
-        auto *row = new QHBoxLayout;
-        row->setSpacing(14);
-        auto *icon = new QLabel(&popup);
-        icon->setObjectName(name);
-        row->addWidget(icon);
-        auto *label = new QLabel(std::strcmp(name, "portraitImage") == 0 ? "Portrait" : "Landscape", &popup);
-        row->addWidget(label);
-        layout->addLayout(row);
+// The firmware uses the hidden Auto label and icon for sizeHint, then applies
+// that size again AFTER showing the popup. Record every visible width, not
+// only the width after our selection hook returns.
+class NativeWidthPopup : public QWidget {
+public:
+    int savedMask = 5;
+    bool fixedIcons = true;
+    QString portraitText = "Portrait";
+    QString landscapeText = "Landscape";
+    QString autoText = "Automatic";
+    QList<int> visibleWidths;
+
+    QSize sizeHint() const override {
+        auto *label = findChild<QLabel *>("labelAuto");
+        auto *icon = findChild<QWidget *>("autoRotateImage");
+        return QSize(QFontMetrics(label->font()).horizontalAdvance(label->text()) + 3 * icon->width(),
+                     layout()->totalSizeHint().height());
     }
-    realSelectedItem = stockSelectedItem;
-    enabled.store(true);
-    for (int current : {nr::Portrait, nr::Landscape, nr::InvertedLandscape}) {
-        orientation.store(current);
-        for (int requested : {0, 3, 1, 2}) {
-            // Native setVisible fixes the popup size before selecting an icon.
-            // Its width comes from the hidden Auto row, not these visible rows.
-            popup.setFixedSize(100, 200);
-            nr_selected_item(&popup, requested);
-            const int expected = requested == 0 || requested == 3
-                ? (current == nr::Portrait ? 1 : 2) : requested;
-            assert(selectedItem == expected);
-            assert(popup.width() >= layout->totalSizeHint().width());
-            assert(popup.height() == 200);
-            const int width = popup.width();
-            nr_selected_item(&popup, requested);
-            assert(popup.width() == width);
+    void setVisible(bool visible) override {
+        QWidget::setVisible(visible);
+        if (visible) {
+            setFixedSize(sizeHint());
+            nr_selected_item(this, savedMask);
         }
     }
-    // A larger native width stays intact; translated labels can grow it.
-    popup.setFixedSize(900, 200);
-    nr_selected_item(&popup, 1);
-    assert(popup.width() == 900);
-    const auto labels = popup.findChildren<QLabel *>();
-    for (auto *label : labels) if (label->objectName().isEmpty())
-        label->setText("A longer translated orientation label");
-    popup.setFixedSize(100, 200);
-    nr_selected_item(&popup, 2);
-    assert(popup.width() >= layout->totalSizeHint().width());
+    void open() {
+        // QMenu obtains the native size hint before showing the popup.
+        resize(sizeHint());
+        show();
+        QApplication::processEvents();
+    }
+protected:
+    void resizeEvent(QResizeEvent *event) override {
+        QWidget::resizeEvent(event);
+        if (isVisible()) visibleWidths.append(width());
+    }
+    void showEvent(QShowEvent *event) override {
+        QWidget::showEvent(event);
+        visibleWidths.append(width());
+    }
+};
+
+static QObject *stockWidthPopup(QObject *object, QObject *) {
+    auto *popup = static_cast<NativeWidthPopup *>(object);
+    auto *layout = new QVBoxLayout(popup);
+    layout->setContentsMargins(12, 12, 12, 12);
+    auto *container = new QWidget(popup);
+    auto *rows = new QVBoxLayout(container);
+    rows->setContentsMargins(10, 0, 10, 0);
+    layout->addWidget(container);
+    auto *autoRow = new QWidget(container);
+    autoRow->setObjectName("autoRotateContainer");
+    auto *autoLayout = new QHBoxLayout(autoRow);
+    auto *autoIcon = new QLabel(autoRow);
+    autoIcon->setObjectName("autoRotateImage");
+    autoIcon->resize(100, 30);
+    autoLayout->addWidget(autoIcon);
+    auto *autoLabel = new QLabel(popup->autoText, autoRow);
+    autoLabel->setObjectName("labelAuto");
+    autoLayout->addWidget(autoLabel);
+    rows->addWidget(autoRow);
+    autoRow->hide();
+    auto *first = new QFrame(container);
+    first->setObjectName("dividerLine1");
+    first->setFrameShape(QFrame::HLine);
+    rows->addWidget(first);
+    for (const char *name : {"portraitImage", "landscapeImage"}) {
+        auto *row = new QHBoxLayout;
+        row->setSpacing(18);
+        auto *icon = new QLabel(container);
+        icon->setObjectName(name);
+        if (popup->fixedIcons) icon->setFixedSize(70, 70);
+        row->addWidget(icon);
+        const bool portrait = std::strcmp(name, "portraitImage") == 0;
+        auto *label = new QLabel(portrait ? popup->portraitText : popup->landscapeText, container);
+        label->setObjectName(portrait ? "labelPortrait" : "labelLandscape");
+        row->addWidget(label);
+        rows->addLayout(row);
+    }
+    stockSelectedItem(popup, 0);
+    return object;
+}
+
+static void popupSelectionAndWidth() {
+    realSelectedItem = stockSelectedItem;
+    realRotatePopup = stockWidthPopup;
+    enabled.store(true);
+    for (bool fixedIcons : {true, false}) {
+        for (int translation : {0, 1, 2}) {
+            for (int initial : {nr::Portrait, nr::Landscape}) {
+                orientation.store(initial);
+                NativeWidthPopup popup;
+                popup.fixedIcons = fixedIcons;
+                if (translation == 1)
+                    popup.portraitText = "A longer translated portrait label";
+                if (translation == 2)
+                    popup.autoText = "A longer translated automatic rotation label";
+                assert(nr_rotate_popup(&popup, nullptr) == &popup);
+                const int firstHint = popup.sizeHint().width();
+                auto *autoIcon = popup.findChild<QWidget *>("autoRotateImage");
+                for (int current : {initial, initial == 1 ? 2 : 1, initial}) {
+                    orientation.store(current);
+                    // Device traces contain paired orientation masks, 5 and 10.
+                    for (int requested : {current == 1 ? 5 : 10, 0, 3}) {
+                        popup.savedMask = requested;
+                        popup.visibleWidths.clear();
+                        popup.open();
+                        assert(!popup.visibleWidths.isEmpty());
+                        for (int width : popup.visibleWidths) {
+                            if (width != firstHint)
+                                fprintf(stderr, "Visible resize: native hint %d, width %d\n", firstHint, width);
+                            assert(width == firstHint);
+                        }
+                        assert(popup.width() == firstHint);
+                        assert(popup.width() >= popup.layout()->totalSizeHint().width());
+                        assert(selectedItem == (requested == 0 || requested == 3 ? current : requested));
+                        popup.hide();
+                        // The device's hidden icon goes from 100 to 41 pixels
+                        // after layout. The next open must keep the same visible width.
+                        autoIcon->resize(41, 30);
+                        QApplication::processEvents();
+                    }
+                }
+            }
+        }
+    }
     enabled.store(false);
-    popup.setFixedSize(100, 200);
-    nr_selected_item(&popup, 3);
-    assert(selectedItem == 3 && popup.width() == 100);
-    puts("PASS: default orientation highlight, selected icon widths, translations and disabled passthrough");
+    NativeWidthPopup popup;
+    nr_rotate_popup(&popup, nullptr);
+    auto *autoIcon = popup.findChild<QWidget *>("autoRotateImage");
+    assert(autoIcon->minimumWidth() == 0 && autoIcon->maximumWidth() == QWIDGETSIZE_MAX);
+    popup.savedMask = 3;
+    popup.open();
+    assert(selectedItem == 3);
+    assert(!popup.findChild<QFrame *>("dividerLine1")->isHidden());
+    popup.hide();
+    autoIcon->resize(41, 30);
+    assert(autoIcon->width() == 41);
+    puts("PASS: native sizing before show, no visible width changes, paired masks, translations and disabled passthrough");
 }
 
 int main(int argc, char **argv) {
