@@ -29,13 +29,13 @@ Clara BW and Colour require **4.45 or newer within 4.x**. Experimental Clara HD 
 | --- | --- | --- | --- |
 | Clara HD | N249 | `376` | Experimental; not tested on a device |
 | Clara 2E | N506 | `386` | Experimental; not tested on a device |
-| Clara BW | N365 | `391` | Rotation, touch and popup fixes confirmed with 0.1.8-dev on 4.45.23697 |
+| Clara BW | N365 | `391` | Rotation, touch and final popup sizing and padding confirmed with the v0.1 build on 4.45.23697 |
 | Clara BW | P365 | `395` | Enabled, but not tested on a device |
 | Clara Colour | N367 | `393` | Rotation and touch confirmed with 0.1.7-dev on 4.45.23697 |
 
 All five model revisions above are enabled. P365 uses the same implementation as N365. HD, 2E and P365 remain unverified without device tests. Devices with other hardware UUIDs stay inactive.
 
-The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The popup fixes added in 0.1.8-dev have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
+The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The final v0.1 popup fixes have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
 
 ## Safety
 
