@@ -1,0 +1,7 @@
+/tmp/
+/KoboRoot.tgz
+*.o
+*.so
+*.moc
+NickelHook/nhplugin.json
+.DS_Store
