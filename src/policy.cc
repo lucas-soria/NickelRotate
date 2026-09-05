@@ -17,12 +17,12 @@ static bool versionNumber(const std::string &text, std::size_t start, std::size_
     return true;
 }
 
-bool supportedVersionRecord(const std::string &record) {
+TouchMapping touchMappingForVersionRecord(const std::string &record) {
     if (record.empty() || record.size() > 1024 || record.find('\0') != std::string::npos)
-        return false;
+        return UnsupportedDevice;
     std::string line = record;
     while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
-    if (line.find_first_of("\r\n") != std::string::npos) return false;
+    if (line.find_first_of("\r\n") != std::string::npos) return UnsupportedDevice;
     std::vector<std::string> fields;
     std::size_t start = 0, end;
     while ((end = line.find(',', start)) != std::string::npos) {
@@ -31,17 +31,33 @@ bool supportedVersionRecord(const std::string &record) {
     }
     fields.push_back(line.substr(start));
     // This is the format read by KoboPatch Web UI's kobo/version.js.
-    if (fields.size() != 6) return false;
+    if (fields.size() != 6) return UnsupportedDevice;
     const std::string &version = fields[2];
-    if (version.compare(0, 2, "4.") != 0) return false;
+    if (version.compare(0, 2, "4.") != 0) return UnsupportedDevice;
     const std::size_t dot = version.find('.', 2);
-    if (dot == std::string::npos) return false;
+    if (dot == std::string::npos) return UnsupportedDevice;
     unsigned minor, patch;
-    if (!versionNumber(version, 2, dot, minor) || minor < 45 ||
-        !versionNumber(version, dot + 1, version.size(), patch)) return false;
-    return fields[5] == "00000000-0000-0000-0000-000000000391" ||
-           fields[5] == "00000000-0000-0000-0000-000000000395" ||
-           fields[5] == "00000000-0000-0000-0000-000000000393";
+    if (!versionNumber(version, 2, dot, minor) ||
+        !versionNumber(version, dot + 1, version.size(), patch)) return UnsupportedDevice;
+    const std::string &id = fields[5];
+    if (id == "00000000-0000-0000-0000-000000000376" ||
+        id == "00000000-0000-0000-0000-000000000386") {
+        if (minor < 38 || (minor == 38 && patch < 23684)) return UnsupportedDevice;
+        // NXP's landscape framebuffer rotation and the panel's physical mapping
+        // differ between Nova and Goldfinch. HD uses the reverse quarter-turn;
+        // 2E keeps Nickel's transform. Neither profile has a device test yet.
+        return id == "00000000-0000-0000-0000-000000000386"
+            ? NativeTouch : ReversedLandscapeTouch;
+    }
+    if (minor >= 45 && (id == "00000000-0000-0000-0000-000000000391" ||
+                       id == "00000000-0000-0000-0000-000000000395" ||
+                       id == "00000000-0000-0000-0000-000000000393"))
+        return ReversedLandscapeTouch;
+    return UnsupportedDevice;
+}
+
+bool supportedVersionRecord(const std::string &record) {
+    return touchMappingForVersionRecord(record) != UnsupportedDevice;
 }
 
 bool readingController(const char *name) {

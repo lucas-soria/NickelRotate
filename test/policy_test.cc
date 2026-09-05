@@ -37,6 +37,21 @@ int main() {
     assert(!nr::supportedVersionRecord("4.46.23836," + std::string(bw)));
     assert(!nr::supportedVersionRecord(""));
 
+    const char *hd = "00000000-0000-0000-0000-000000000376";
+    const char *twoE = "00000000-0000-0000-0000-000000000386";
+    for (const char *model : {hd, twoE}) {
+        for (const char *version : {"4.38.23684", "4.38.23697", "4.45.23697"})
+            assert(nr::supportedVersionRecord(record(version, model)));
+        for (const char *version : {"4.37.99999", "4.38.23683", "5.0.0", "4.38.23684x"})
+            assert(!nr::supportedVersionRecord(record(version, model)));
+    }
+    assert(nr::touchMappingForVersionRecord(record("4.38.23684", hd)) == nr::ReversedLandscapeTouch);
+    assert(nr::touchMappingForVersionRecord(record("4.38.23697", twoE)) == nr::NativeTouch);
+    for (const char *model : {bw, bwRevision, colour}) {
+        assert(nr::touchMappingForVersionRecord(record("4.45.23697", model)) == nr::ReversedLandscapeTouch);
+        assert(nr::touchMappingForVersionRecord(record("4.38.23697", model)) == nr::UnsupportedDevice);
+    }
+
     assert(nr::readingController("ReadingController"));
     assert(nr::readingController("TableOfContentsController"));
     assert(nr::readingController("AdvancedFontSettingsController"));

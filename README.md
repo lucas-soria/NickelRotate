@@ -1,22 +1,24 @@
 # NickelRotate
 
-Manual rotation for the built-in reader on Kobo Clara BW and Clara Colour. Choose Portrait or Landscape from the reading menu. Home, Library and general settings stay portrait.
+Manual rotation for the built-in reader on Kobo Clara HD, Clara 2E, Clara BW and Clara Colour. Choose Portrait or Landscape from the reading menu. Home, Library and general settings stay portrait.
 
 NickelRotate is experimental. Rotation and touch have been tested on Clara BW and Clara Colour running firmware 4.45.23697.
 
 ## Compatibility
 
-NickelRotate accepts firmware **4.45 and newer within 4.x**. Firmware 5.x is excluded. It identifies devices by hardware UUID, not serial prefix.
+Clara BW and Colour require **4.45 or newer within 4.x**. Experimental Clara HD and 2E support requires **4.38.23684 or newer within 4.x**. Firmware 5.x is excluded. NickelRotate identifies devices by hardware UUID, not serial prefix.
 
 | Model | Revision | UUID suffix | Device testing |
 | --- | --- | --- | --- |
+| Clara HD | N249 | `376` | Experimental; not tested on a device |
+| Clara 2E | N506 | `386` | Experimental; not tested on a device |
 | Clara BW | N365 | `391` | Rotation, touch and popup fixes confirmed with 0.1.8-dev on 4.45.23697 |
 | Clara BW | P365 | `395` | Enabled, but not tested on a device |
 | Clara Colour | N367 | `393` | Rotation and touch confirmed with 0.1.7-dev on 4.45.23697 |
 
-Both Clara BW revisions are enabled. P365 uses the same mod implementation, but compatibility remains unverified without a device test. Devices with other hardware UUIDs stay inactive.
+All five model revisions above are enabled. P365 uses the same implementation as N365. HD, 2E and P365 remain unverified without device tests. Devices with other hardware UUIDs stay inactive.
 
-The required firmware hooks have been checked on 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The popup fixes added in 0.1.8-dev have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
+The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The popup fixes added in 0.1.8-dev have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
 
 ## Installation and use
 
@@ -59,7 +61,7 @@ On a device, check taps near every corner, page turns, swipes, text selection an
 
 `src/nickelrotate.cc` uses eight NickelHook PLT hooks. A thread-local permission scope exposes rotation while Nickel calculates reader permissions or updates the reading menu. Sensor queries outside that scope keep their original behaviour. A leftover `ForceAllowLandscape` setting is ignored inside the permission scope without changing the configuration file.
 
-The touch hooks preserve Kobo's panel mapping and replace its final orientation transform. Landscape uses the opposite quarter-turn from Qt to correct the alignment observed in device testing. Orientation changes are read on the GUI thread and shared with the touch thread through an atomic value. Portrait preserves the panel mapper's output.
+The touch hooks preserve Kobo's panel mapping. BW and Colour use the opposite landscape quarter-turn from Qt to correct the alignment observed in device testing. The experimental HD profile uses that correction too; the 2E profile preserves Nickel's complete native touch transform. These older-model profiles are inferred from the firmware rotation tables and [FBInk's device mappings](https://github.com/NiLuJe/FBInk/blob/master/fbink_device_id.c), and still need hardware validation. Orientation changes are read on the GUI thread and shared with the touch thread through an atomic value. Portrait preserves the panel mapper's output.
 
 The popup constructor hook hides the separator above Portrait. The selection hook highlights the current orientation when Auto would be selected, then expands the popup to fit its visible layout. The constructor hook preserves the ARM return value. Hook targets must be globally bound functions; NickelHook rejects weak symbols such as the generated `setupUi` function.
 

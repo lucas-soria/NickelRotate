@@ -23,6 +23,7 @@
 static std::atomic<bool> enabled(false);
 static std::atomic<int> orientation(nr::Portrait);
 static int portraitWidth = 0, portraitHeight = 0;
+static nr::TouchMapping touchMapping = nr::UnsupportedDevice;
 static thread_local nr::Permission permission = {false, false};
 static thread_local bool mappingTouch = false;
 
@@ -103,7 +104,8 @@ NR_EXPORT bool nr_force_landscape(void *self) {
 }
 
 NR_EXPORT QPoint nr_map_from_device(const void *self, const QPoint &point) {
-    if (!enabled.load(std::memory_order_acquire)) return realMapFromDevice(self, point);
+    if (!enabled.load(std::memory_order_acquire) || touchMapping != nr::ReversedLandscapeTouch)
+        return realMapFromDevice(self, point);
     struct TouchScope {
         bool saved;
         TouchScope() : saved(mappingTouch) { mappingTouch = true; }
@@ -113,7 +115,7 @@ NR_EXPORT QPoint nr_map_from_device(const void *self, const QPoint &point) {
 }
 
 NR_EXPORT QPoint nr_transform_map(const QTransform *transform, const QPoint &point) {
-    if (!enabled.load(std::memory_order_acquire) || !mappingTouch)
+    if (!enabled.load(std::memory_order_acquire) || touchMapping != nr::ReversedLandscapeTouch || !mappingTouch)
         return realTransformMap(transform, point);
     const int current = orientation.load(std::memory_order_acquire);
     if (!nr::validOrientation(current)) return realTransformMap(transform, point);
@@ -133,8 +135,9 @@ static int init() {
     QFile version("/mnt/onboard/.kobo/version");
     if (!version.open(QIODevice::ReadOnly)) { nh_log("NickelRotate: cannot read device version; inactive"); return 0; }
     const QByteArray record = version.read(1025);
-    if (!nr::supportedVersionRecord(std::string(record.constData(), record.size()))) {
-        nh_log("NickelRotate: requires Clara BW or Clara Colour and firmware 4.45 or newer within 4.x; inactive");
+    touchMapping = nr::touchMappingForVersionRecord(std::string(record.constData(), record.size()));
+    if (touchMapping == nr::UnsupportedDevice) {
+        nh_log("NickelRotate: unsupported Clara model or firmware; inactive");
         return 0;
     }
     if (access(NR_DIR "/disabled", F_OK) == 0) { nh_log("NickelRotate: disabled marker; inactive"); return 0; }
@@ -155,7 +158,7 @@ static int init() {
     const QByteArray firmware = record.split(',').value(2);
     nh_log("NickelRotate " NH_VERSION ": firmware %s; reader rotation enabled", firmware.constData());
     // Signal callbacks run on the GUI thread. The touch thread only reads the
-    // atomic orientation and immutable panel dimensions, never a QScreen.
+    // atomic orientation and immutable panel dimensions/mapping, never a QScreen.
     QObject::connect(screen, &QScreen::orientationChanged, app, [screen](Qt::ScreenOrientation) { screenChanged(screen); });
     QObject::connect(screen, &QScreen::geometryChanged, app, [screen](const QRect &) { screenChanged(screen); });
     screenChanged(screen);
@@ -178,7 +181,7 @@ static bool uninstall() {
 
 static struct nh_info info = {
     .name = "NickelRotate",
-    .desc = "Manual reader rotation for Clara BW and Clara Colour (experimental)",
+    .desc = "Manual reader rotation for Kobo Clara devices (experimental)",
     .uninstall_flag = NR_DIR "/uninstall-now",
     .uninstall_xflag = NR_DIR "/uninstall",
     .failsafe_delay = 3,

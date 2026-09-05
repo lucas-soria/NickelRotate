@@ -8,6 +8,8 @@ namespace nr {
 enum Orientation { Portrait = 1, Landscape = 2, InvertedPortrait = 4, InvertedLandscape = 8 };
 struct Point { int x; int y; };
 
+enum TouchMapping { UnsupportedDevice, NativeTouch, ReversedLandscapeTouch };
+TouchMapping touchMappingForVersionRecord(const std::string &record);
 bool supportedVersionRecord(const std::string &record);
 bool readingController(const char *name);
 bool validOrientation(int orientation);

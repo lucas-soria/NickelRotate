@@ -58,6 +58,11 @@ static QPoint stockDeviceMap(const void *, const QPoint &raw) {
     return nr_transform_map(&stockTransform, QPoint(1080 - raw.y(), raw.x()));
 }
 
+static QPoint stockNxpDeviceMap(const void *, const QPoint &raw) {
+    const QPoint portrait(qBound(0, 1072 - raw.y(), 1071), qBound(0, raw.x(), 1447));
+    return nr_transform_map(&stockTransform, portrait);
+}
+
 static QObject *stockRotatePopup(QObject *object, QObject *parent) {
     assert(object->parent() == parent);
     auto *popup = static_cast<QWidget *>(object);
@@ -150,6 +155,7 @@ int main(int argc, char **argv) {
     realForceLandscape = stockForce;
     realMapFromDevice = stockDeviceMap;
     realTransformMap = stockMap;
+    touchMapping = nr::ReversedLandscapeTouch;
     portraitWidth = 1072;
     portraitHeight = 1448;
     enabled.store(true);
@@ -193,6 +199,22 @@ int main(int argc, char **argv) {
     try { nr_map_from_device(nullptr, raw); assert(false); } catch (int) {}
     assert(!mappingTouch);
     throwMapping = false;
+    // Clara 2E must preserve the complete native mapping in every orientation.
+    touchMapping = nr::NativeTouch;
+    for (int current : {nr::Portrait, nr::Landscape, nr::InvertedLandscape}) {
+        orientation.store(current);
+        assert(nr_map_from_device(nullptr, raw) == stockTransform.map(portrait));
+        assert(!mappingTouch);
+    }
+    realMapFromDevice = stockNxpDeviceMap;
+    stockTransform = QTransform(0, -1, 1, 0, 0, 1072);
+    orientation.store(nr::Landscape);
+    touchMapping = nr::ReversedLandscapeTouch;
+    assert(nr_map_from_device(nullptr, raw) == QPoint(1347,872));
+    touchMapping = nr::NativeTouch;
+    assert(nr_map_from_device(nullptr, raw) == QPoint(100,200));
+    realMapFromDevice = stockDeviceMap;
+    touchMapping = nr::ReversedLandscapeTouch;
     enabled.store(false);
     assert(nr_allowable(nullptr, static_cast<AbstractController *>(&settings)) == 15);
     assert(nr_map_from_device(nullptr, raw) == stockTransform.map(portrait));

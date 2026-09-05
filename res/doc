@@ -1,13 +1,14 @@
 NickelRotate (experimental)
 
 Clara BW and Clara Colour, firmware 4.45 and newer within 4.x.
+Experimental Clara HD and Clara 2E, firmware 4.38.23684 and newer within 4.x.
 Firmware 5.x is excluded.
 Open a book, open its reading menu, and choose Portrait or Landscape.
 Auto rotation is unavailable. Home, Library and general settings stay portrait.
 The selected reading orientation uses Kobo's existing saved preference.
 
-Clara BW N365 and P365 and Clara Colour N367 are enabled.
-P365 has not been tested on a device.
+Clara HD N249, Clara 2E N506, Clara BW N365/P365 and Clara Colour N367
+are enabled. HD, 2E and P365 have not been tested on a device.
 Rotation, touch and the popup fixes are confirmed on Clara BW N365 with
 0.1.8-dev and firmware 4.45.23697. Rotation and touch are also confirmed
 on Clara Colour N367 with 0.1.7-dev and firmware 4.45.23697.
