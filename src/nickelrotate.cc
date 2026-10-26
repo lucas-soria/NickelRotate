@@ -14,12 +14,18 @@
 #include <QLabel>
 #include <QFontMetrics>
 #include <cxxabi.h>
+#include <dlfcn.h>
 #include <atomic>
 #include <cstring>
 #include <typeinfo>
 #include <unistd.h>
 
+#ifndef NR_DIR
 #define NR_DIR "/mnt/onboard/.adds/nickel-rotate"
+#endif
+#ifndef NR_VERSION_FILE
+#define NR_VERSION_FILE "/mnt/onboard/.kobo/version"
+#endif
 #define NR_EXPORT extern "C" __attribute__((visibility("default")))
 
 static std::atomic<bool> enabled(false);
@@ -38,6 +44,10 @@ static bool (*realForceLandscape)(void *) = nullptr;
 static QPoint (*realMapFromDevice)(const void *, const QPoint &) = nullptr;
 static QPoint (*realTransformMap)(const QTransform *, const QPoint &) = nullptr;
 static const __cxxabiv1::__class_type_info *abstractType = nullptr;
+
+// NickelHook has already loaded every hooked library. Tests replace this.
+static void *openLoadedLib(const char *name) { return dlopen(name, RTLD_LAZY | RTLD_NOLOAD); }
+static void *(*openHookLib)(const char *) = openLoadedLib;
 
 static QObject *controllerObject(void *controller) {
     if (!controller || !abstractType) return nullptr;
@@ -129,9 +139,12 @@ NR_EXPORT QObject *nr_rotate_popup(QObject *popup, QObject *parent) {
 
 NR_EXPORT void nr_selected_item(QWidget *popup, int selected) {
     if (!enabled.load(std::memory_order_acquire)) { realSelectedItem(popup, selected); return; }
-    // No lock and the combined Portrait/Landscape mask select Auto in Nickel.
-    // Auto is hidden here, so show the current orientation without saving a lock.
-    if (selected == 0 || selected == (nr::Portrait | nr::Landscape)) {
+    // No lock, or any mask allowing both portrait and landscape, selects Auto
+    // in Nickel. Auto is hidden here, so show the current orientation without
+    // saving a lock. Paired masks such as 5 and 10 pass through unchanged.
+    const bool anyPortrait = selected & (nr::Portrait | nr::InvertedPortrait);
+    const bool anyLandscape = selected & (nr::Landscape | nr::InvertedLandscape);
+    if (selected == 0 || (anyPortrait && anyLandscape)) {
         const int current = orientation.load(std::memory_order_acquire);
         selected = current == nr::Landscape || current == nr::InvertedLandscape
             ? nr::Landscape : nr::Portrait;
@@ -179,16 +192,31 @@ static void screenChanged(QScreen *screen) {
     if (nr::validOrientation(current)) orientation.store(current, std::memory_order_release);
 }
 
+static void restoreHooks();
+
+// NickelHook applies every hook before init. Undo them when staying inactive
+// so no Nickel call passes through this plugin. Returning an error would do
+// the same, but NickelHook then dumps syslog to the user's storage each boot.
+static int inactive(const char *reason) {
+    nh_log("NickelRotate: %s; inactive", reason);
+    restoreHooks();
+    return 0;
+}
+
 static int init() {
-    QFile version("/mnt/onboard/.kobo/version");
-    if (!version.open(QIODevice::ReadOnly)) { nh_log("NickelRotate: cannot read device version; inactive"); return 0; }
+    QFile version(NR_VERSION_FILE);
+    if (!version.open(QIODevice::ReadOnly)) return inactive("cannot read device version");
     const QByteArray record = version.read(1025);
     touchMapping = nr::touchMappingForVersionRecord(std::string(record.constData(), record.size()));
-    if (touchMapping == nr::UnsupportedDevice) {
-        nh_log("NickelRotate: unsupported Clara model or firmware; inactive");
-        return 0;
+    if (touchMapping == nr::UnsupportedDevice) return inactive("unsupported Clara model or firmware");
+    if (access(NR_DIR "/disabled", F_OK) == 0) return inactive("disabled marker");
+    // The touch hooks are optional so Clara 2E, which keeps Nickel's touch
+    // transform, does not depend on them. Rotation without the correction is
+    // unsafe everywhere else, so let NickelHook roll back every hook.
+    if (touchMapping == nr::ReversedLandscapeTouch && (!realMapFromDevice || !realTransformMap)) {
+        nh_log("NickelRotate: touch correction hooks unavailable; rollback");
+        return 1;
     }
-    if (access(NR_DIR "/disabled", F_OK) == 0) { nh_log("NickelRotate: disabled marker; inactive"); return 0; }
     QCoreApplication *app = QCoreApplication::instance();
     QScreen *screen = QGuiApplication::primaryScreen();
     if (!app || !screen || QThread::currentThread() != app->thread()) {
@@ -197,10 +225,8 @@ static int init() {
     }
     QSize size = screen->size();
     if (size.width() > size.height()) size.transpose();
-    if (size != QSize(1072, 1448) || screen->nativeOrientation() != Qt::PortraitOrientation) {
-        nh_log("NickelRotate: unexpected panel geometry/orientation; inactive");
-        return 0;
-    }
+    if (size != QSize(1072, 1448) || screen->nativeOrientation() != Qt::PortraitOrientation)
+        return inactive("unexpected panel geometry/orientation");
     portraitWidth = size.width();
     portraitHeight = size.height();
     const QByteArray firmware = record.split(',').value(2);
@@ -248,11 +274,26 @@ static struct nh_hook hooks[] = {
     //nb hook libnickel 4.38.23684 * _ZN11DevSettings19forceAllowLandscapeEv
     { .sym = "_ZN11DevSettings19forceAllowLandscapeEv", .sym_new = "nr_force_landscape", .lib = "libnickel.so.1.0.0", .out = nh_symoutptr(realForceLandscape) },
     // NickelBench does not record libkevdevtouch. Both touch hooks are checked
-    // against extracted firmware by test/verify_firmware.py.
-    { .sym = "_ZNK21QEvdevTouchScreenData13mapFromDeviceERK6QPoint", .sym_new = "nr_map_from_device", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realMapFromDevice) },
-    { .sym = "_ZNK10QTransform3mapERK6QPoint", .sym_new = "nr_transform_map", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realTransformMap) },
+    // against extracted firmware by test/verify_firmware.py. They are optional
+    // for Clara 2E only; init rolls back when another model is missing them.
+    { .sym = "_ZNK21QEvdevTouchScreenData13mapFromDeviceERK6QPoint", .sym_new = "nr_map_from_device", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realMapFromDevice), .desc = nullptr, .optional = true },
+    { .sym = "_ZNK10QTransform3mapERK6QPoint", .sym_new = "nr_transform_map", .lib = "/usr/local/Kobo/generic/libkevdevtouch.so", .out = nh_symoutptr(realTransformMap), .desc = nullptr, .optional = true },
     {0},
 };
+// Hidden in NickelHook, but linked into this plugin.
+extern "C" __attribute__((visibility("hidden"))) void *nh_dlhook(void *handle, const char *symname, void *target);
+
+static void restoreHooks() {
+    for (nh_hook *hook = hooks; hook->sym; ++hook) {
+        if (!*hook->out) continue; // optional hook that was not applied
+        // NOLOAD only finds the library NickelHook already opened. The extra
+        // reference is kept, matching NickelHook's own handling.
+        void *lib = openHookLib(hook->lib);
+        if (!lib || !nh_dlhook(lib, hook->sym, *hook->out))
+            nh_log("NickelRotate: could not restore %s", hook->sym);
+    }
+}
+
 static struct nh_dlsym symbols[] = {
     //nb lookup libnickel 4.38.23684 * _ZTI18AbstractController
     { .name = "_ZTI18AbstractController", .out = nh_symoutptr(abstractType) },
