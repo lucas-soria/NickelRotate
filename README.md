@@ -35,7 +35,7 @@ Clara BW and Colour require **4.45 or newer within 4.x**. Experimental Clara HD 
 
 All five model revisions above are enabled. P365 uses the same implementation as N365. HD, 2E and P365 remain unverified without device tests. Devices with other hardware UUIDs stay inactive.
 
-The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All eight hooks must resolve before the mod activates. The final v0.1 popup fixes have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
+The required firmware hooks have been checked on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Later 4.x versions remain unverified. All six reader hooks must resolve before the mod activates, and the two touch hooks must resolve on every model except Clara 2E, which keeps Nickel's own touch transform. The final v0.1 popup fixes have been confirmed on the BW; they have not been retested on the Colour. Broader checks such as text selection, sleep/wake, EPUB and on-device behaviour on 4.46 remain incomplete.
 
 ## Safety
 
@@ -52,7 +52,7 @@ The startup failsafe does not detect touch problems found later while reading. I
 
 ### Required hooks
 
-Rotation and touch correction must work together. All eight hooks and the controller lookup are required. If a target cannot be resolved, NickelHook rolls back the hooks it applied. Unsupported models, firmware versions and unexpected screen geometry keep NickelRotate inactive.
+Rotation and touch correction must work together. The six reader hooks and the controller lookup are always required. The two touch hooks are required on every model that needs the touch correction; only Clara 2E, which keeps Nickel's own touch transform, may run without them. If a required target cannot be resolved, NickelHook rolls back the hooks it applied. Unsupported models, firmware versions, the disable marker and unexpected screen geometry keep NickelRotate inactive, and NickelRotate then restores every hook so Nickel runs unmodified.
 
 ## Build
 

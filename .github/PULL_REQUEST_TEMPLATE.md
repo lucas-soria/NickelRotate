@@ -20,5 +20,5 @@
 - [ ] User-visible changes have a CHANGELOG entry.
 - [ ] Hooks and lookups covered by NickelBench have up-to-date annotations.
 - [ ] Touch hook changes pass the local firmware verifier.
-- [ ] Rotation and touch hooks remain one required dependency group.
+- [ ] Rotation and touch hooks remain one required dependency group on models that use the touch correction.
 - [ ] `./build.sh` and `./test.sh` pass.

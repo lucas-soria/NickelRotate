@@ -1,8 +1,14 @@
 // Exercise the production hooks against small stand-ins for Nickel's callers.
 // This does not load or emulate Nickel, its screen driver, or its touch device.
+#define NR_DIR "tmp/nr-test"
+#define NR_VERSION_FILE NR_DIR "/version"
 #include "../src/nickelrotate.cc"
 #include <cassert>
+#include <cstdio>
+#include <string>
 #include <thread>
+#include <vector>
+#include <sys/stat.h>
 #include <QApplication>
 #include <QFrame>
 #include <QVBoxLayout>
@@ -15,6 +21,18 @@
 extern "C" void nh_log(const char *, ...) {}
 extern "C" bool nh_delete_file(const char *) { return true; }
 extern "C" bool nh_delete_dir(const char *) { return true; }
+
+// Record restores instead of editing a real PLT. nh_dlhook returns the
+// previous target on success, which is non-null for every hook here.
+struct Restore { std::string sym; void *target; };
+static std::vector<Restore> restores;
+static const char *failRestore = nullptr;
+extern "C" void *nh_dlhook(void *lib, const char *sym, void *target) {
+    assert(lib);
+    restores.push_back({sym, target});
+    return failRestore && std::strcmp(sym, failRestore) == 0 ? nullptr : target;
+}
+static void *fakeHookLib(const char *) { static int handle; return &handle; }
 
 class AbstractController {
 public:
@@ -203,7 +221,7 @@ static void popupSelectionAndWidth() {
                 for (int current : {initial, initial == 1 ? 2 : 1, initial}) {
                     orientation.store(current);
                     // Device traces contain paired orientation masks, 5 and 10.
-                    for (int requested : {current == 1 ? 5 : 10, 0, 3}) {
+                    for (int requested : {current == 1 ? 5 : 10, 0, 3, 15}) {
                         popup.savedMask = requested;
                         popup.visibleWidths.clear();
                         popup.open();
@@ -215,7 +233,7 @@ static void popupSelectionAndWidth() {
                         }
                         assert(popup.width() == firstHint);
                         assert(popup.width() >= popup.layout()->totalSizeHint().width());
-                        assert(selectedItem == (requested == 0 || requested == 3 ? current : requested));
+                        assert(selectedItem == (requested == 0 || requested == 3 || requested == 15 ? current : requested));
                         popup.hide();
                         // The device's hidden icon goes from 100 to 41 pixels
                         // after layout. The next open must keep the same visible width.
@@ -239,6 +257,126 @@ static void popupSelectionAndWidth() {
     autoIcon->resize(41, 30);
     assert(autoIcon->width() == 41);
     puts("PASS: native sizing before show, no visible width changes, paired masks, translations and disabled passthrough");
+}
+
+static void recordSelectedItem(QWidget *, int selected) { selectedItem = selected; }
+
+// Nickel passes masks with any mix of the four orientation bits. Auto is
+// hidden, so every mask that allows both a portrait and a landscape
+// orientation must highlight the current row; every other mask passes through.
+static void allMasksSelectVisibleRow() {
+    realSelectedItem = recordSelectedItem;
+    enabled.store(true);
+    QWidget popup;
+    for (int current : {nr::Portrait, nr::Landscape}) {
+        orientation.store(current);
+        for (int mask = 0; mask < 16; ++mask) {
+            nr_selected_item(&popup, mask);
+            const bool portrait = mask & (nr::Portrait | nr::InvertedPortrait);
+            const bool landscape = mask & (nr::Landscape | nr::InvertedLandscape);
+            const int expected = mask == 0 || (portrait && landscape) ? current : mask;
+            if (selectedItem != expected)
+                fprintf(stderr, "mask %d with current %d selected %d, expected %d\n", mask, current, selectedItem, expected);
+            assert(selectedItem == expected);
+        }
+    }
+    enabled.store(false);
+    puts("PASS: every orientation mask highlights a visible row");
+}
+
+static void writeFile(const char *path, const std::string &text) {
+    FILE *file = fopen(path, "wb");
+    assert(file);
+    fputs(text.c_str(), file);
+    fclose(file);
+}
+static std::string versionRecord(const char *id, const char *firmware = "4.46.23836") {
+    return std::string("N367-test,4.9.77,") + firmware + ",4.9.77,4.9.77,00000000-0000-0000-0000-000000000" + id;
+}
+static int runInit(const std::string *record, bool disabled = false) {
+    mkdir("tmp", 0755);
+    mkdir(NR_DIR, 0755);
+    remove(NR_VERSION_FILE);
+    remove(NR_DIR "/disabled");
+    if (record) writeFile(NR_VERSION_FILE, *record);
+    if (disabled) writeFile(NR_DIR "/disabled", "");
+    restores.clear();
+    enabled.store(false);
+    const int result = init();
+    remove(NR_VERSION_FILE);
+    remove(NR_DIR "/disabled");
+    return result;
+}
+// Every hook NickelHook applied (non-null original) is restored once, in
+// table order, with its original target. Unapplied hooks are skipped.
+static void assertRestoredApplied() {
+    std::size_t next = 0;
+    for (nh_hook *hook = hooks; hook->sym; ++hook) {
+        if (!*hook->out) continue;
+        assert(next < restores.size());
+        assert(restores[next].sym == hook->sym && restores[next].target == *hook->out);
+        ++next;
+    }
+    if (next != restores.size())
+        fprintf(stderr, "restored %zu hooks, expected %zu\n", restores.size(), next);
+    assert(next == restores.size());
+}
+
+static void inactiveRestoresHooks() {
+    openHookLib = fakeHookLib;
+    // Stand-in originals: init only restores them, it never calls them.
+    std::vector<void *> originals;
+    for (nh_hook *hook = hooks; hook->sym; ++hook) {
+        originals.push_back(*hook->out);
+        *hook->out = reinterpret_cast<void *>(0x1000 + 0x10 * originals.size());
+    }
+    const std::string bw = versionRecord("391"), unknown = versionRecord("390");
+    // The minimal QPA screen is not 1072x1448, so a supported device stops
+    // at the geometry check.
+    for (int scenario = 0; scenario < 4; ++scenario) {
+        const int result = scenario == 0 ? runInit(nullptr)
+                         : scenario == 1 ? runInit(&unknown)
+                         : scenario == 2 ? runInit(&bw, true)
+                         : runInit(&bw);
+        assert(result == 0 && !enabled.load());
+        if (restores.empty()) fprintf(stderr, "inactive scenario %d restored no hooks\n", scenario);
+        assertRestoredApplied();
+    }
+    // A hook NickelHook did not apply has no original and must be skipped.
+    void *saved = *hooks[2].out;
+    *hooks[2].out = nullptr;
+    assert(runInit(&unknown) == 0);
+    assertRestoredApplied();
+    for (const Restore &restore : restores) assert(restore.sym != hooks[2].sym);
+    *hooks[2].out = saved;
+    // One failed restore must not stop the others.
+    failRestore = hooks[0].sym;
+    assert(runInit(&unknown) == 0);
+    assertRestoredApplied();
+    failRestore = nullptr;
+    std::size_t index = 0;
+    for (nh_hook *hook = hooks; hook->sym; ++hook) *hook->out = originals[index++];
+    puts("PASS: inactive init restores every applied hook, skips unapplied ones and survives a failed restore");
+}
+
+static void optionalTouchHooks() {
+    // Only the touch hooks are optional; init enforces them where needed.
+    for (nh_hook *hook = hooks; hook->sym; ++hook)
+        assert(hook->optional == (std::strstr(hook->lib, "libkevdevtouch.so") != nullptr));
+    auto savedTransform = realTransformMap;
+    auto savedDevice = realMapFromDevice;
+    const std::string bw = versionRecord("391"), twoE = versionRecord("386", "4.38.23828");
+    // BW needs the touch correction: missing hook means NickelHook rollback.
+    realTransformMap = nullptr;
+    assert(runInit(&bw) == 1);
+    assert(restores.empty());
+    // 2E keeps Nickel's own touch transform, so missing touch hooks are fine.
+    realMapFromDevice = nullptr;
+    assert(runInit(&twoE) == 0);
+    assertRestoredApplied();
+    realTransformMap = savedTransform;
+    realMapFromDevice = savedDevice;
+    puts("PASS: touch hooks optional only where Nickel's native transform is kept");
 }
 
 int main(int argc, char **argv) {
@@ -331,6 +469,9 @@ int main(int argc, char **argv) {
         assert(first->isVisible() == !active && second->isVisible());
     }
     popupSelectionAndWidth();
+    allMasksSelectVisibleRow();
+    inactiveRestoresHooks();
+    optionalTouchHooks();
     puts("PASS: rotation popup hides only the orphan separator, including after show");
     puts("PASS: production hook scopes, controller cross-cast, audiobook mask, touch replacement, disabled passthrough and exception cleanup");
 }

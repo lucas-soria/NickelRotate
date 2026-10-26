@@ -42,7 +42,7 @@ python3 test/verify_firmware.py PATH_TO_LIBNICKEL PATH_TO_LIBKEVDEVTOUCH src/lib
 
 This checks all eight PLT call sites, global function bindings, controller RTTI, plugin exports and the ARM hard-float ABI. Firmware checks have passed on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Keep firmware binaries out of Git and release artifacts.
 
-All hooks and the lookup remain required. Rotation without its touch correction is unsafe to use, so these are one dependency group. This differs from NickelTypeFix's independent optional fixes. NickelRotate has no instruction-byte patches and needs no byte-anchor validation job.
+The six reader hooks and the lookup are always required. The two touch hooks are marked optional only so Clara 2E, which keeps Nickel's own touch transform, does not depend on them; `init()` rolls back every hook when a model that needs the touch correction is missing either one. Rotation without its touch correction is unsafe to use, so on those models these remain one dependency group. When NickelRotate stays inactive (unsupported model or firmware, disable marker, unexpected geometry), it restores every applied hook instead of leaving them in passthrough. This differs from NickelTypeFix's independent optional fixes. NickelRotate has no instruction-byte patches and needs no byte-anchor validation job.
 
 ## Testing on a device
 
@@ -62,7 +62,7 @@ Old `diagnostics` and `observe-touch` markers are ignored. Known legacy log file
 
 - Add user-visible changes to `CHANGELOG.md`.
 - Update the annotations for every changed hook or lookup covered by NickelBench. Check touch-library changes against extracted firmware.
-- Keep rotation and touch hooks in the same required dependency group.
+- Keep rotation and touch hooks in the same required dependency group on every model that uses the touch correction.
 - Run `./build.sh` and `./test.sh`.
 - State the device and firmware actually tested, or state that hardware testing is pending. Include relevant syslog output when available.
 

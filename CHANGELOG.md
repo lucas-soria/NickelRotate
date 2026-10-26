@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.1
+
+### Changed
+
+- The two touch hooks are optional on Clara 2E, which keeps Nickel's own touch transform. Every other model still rolls back all hooks if either touch hook is missing.
+
+### Fixed
+
+- Hooks left in place while NickelRotate was inactive. On an unsupported model or firmware, with the disable marker, with an unreadable version file or with unexpected screen geometry, NickelRotate now restores every applied hook so Nickel runs unmodified.
+- The hidden Auto option being highlighted for orientation masks such as 15. Any mask that allows both portrait and landscape now highlights the current orientation.
+
 ## v0.1
 
 ### Added
