@@ -40,7 +40,7 @@ For a complete check, extract `libnickel.so.1.0.0` and `generic/libkevdevtouch.s
 python3 test/verify_firmware.py PATH_TO_LIBNICKEL PATH_TO_LIBKEVDEVTOUCH src/libnickelrotate.so
 ```
 
-This checks all eight PLT call sites, global function bindings, controller RTTI, plugin exports and the ARM hard-float ABI. Firmware checks have passed on 4.38.23684, 4.38.23697, 4.45.23697 and 4.46.23836. Keep firmware binaries out of Git and release artifacts.
+This checks all eight PLT call sites, global function bindings, controller RTTI, plugin exports and the ARM hard-float ABI. Firmware checks have passed on 4.38.23684, 4.38.23697, 4.38.23828, 4.45.23697 and 4.46.23836. NickelBench's database does not include 4.38.23828 yet, so `check-source` does not cover it. Keep firmware binaries out of Git and release artifacts.
 
 The six reader hooks and the lookup are always required. The two touch hooks are marked optional only so Clara 2E, which keeps Nickel's own touch transform, does not depend on them; `init()` rolls back every hook when a model that needs the touch correction is missing either one. Rotation without its touch correction is unsafe to use, so on those models these remain one dependency group. When NickelRotate stays inactive (unsupported model or firmware, disable marker, unexpected geometry), it restores every applied hook instead of leaving them in passthrough. This differs from NickelTypeFix's independent optional fixes. NickelRotate has no instruction-byte patches and needs no byte-anchor validation job.
 
